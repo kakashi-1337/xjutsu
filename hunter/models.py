@@ -263,6 +263,9 @@ class PayloadLibrary(models.Model):
         ('polyglot', 'Polyglots'),
         ('trusted_types', 'Trusted Types'),
         ('short', 'Ultra-Short'),
+        ('browser', 'Browser-Specific'),
+        ('webview', 'WebView/Hybrid'),
+        ('minified', 'Minified'),
         ('custom', 'Custom'),
     ]
 
