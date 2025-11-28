@@ -1,0 +1,198 @@
+{% extends 'hunter/base.html' %}
+
+{% block title %}Payload Generator - XJutsu v5{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-3xl font-bold">
+            <i class="fas fa-magic text-primary mr-2"></i>Payload Generator
+        </h1>
+        <p class="text-gray-500 mt-1">Advanced XSS payload obfuscation for WAF bypass</p>
+    </div>
+    
+    <!-- Custom Generator -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-bold mb-4">
+            <i class="fas fa-cogs text-secondary mr-2"></i>Custom Payload Builder
+        </h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+                <label class="block text-sm text-gray-500 mb-2">Context</label>
+                <select id="contextSelect" class="w-full px-4 py-2 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary">
+                    <option value="html_tag">HTML Tag (default)</option>
+                    <option value="html_attribute">HTML Attribute</option>
+                    <option value="javascript">JavaScript String</option>
+                    <option value="url">URL Parameter</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 mb-2">Encoding</label>
+                <select id="encodingSelect" class="w-full px-4 py-2 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary">
+                    <option value="none">None (Plain)</option>
+                    <option value="base64">Base64</option>
+                    <option value="charcode">CharCode</option>
+                    <option value="url">URL Encode</option>
+                    <option value="html_entity">HTML Entity</option>
+                    <option value="constructor">Constructor</option>
+                    <option value="polyglot">Polyglot</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 mb-2">&nbsp;</label>
+                <button onclick="generateCustomPayload()" class="w-full btn-primary px-4 py-2 rounded-lg font-semibold">
+                    <i class="fas fa-bolt mr-2"></i>Generate
+                </button>
+            </div>
+        </div>
+        
+        <div class="bg-dark-900 rounded-lg p-4 relative">
+            <pre id="customPayloadOutput" class="text-green-400 text-sm whitespace-pre-wrap break-all min-h-[60px]">Select options and click Generate...</pre>
+            <button onclick="copyCustomPayload()" class="absolute top-2 right-2 px-3 py-1 bg-primary/20 text-primary rounded hover:bg-primary/30 transition">
+                <i class="fas fa-copy mr-1"></i>Copy
+            </button>
+        </div>
+    </div>
+    
+    <!-- Basic Payloads -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-bold mb-4">
+            <i class="fas fa-code text-green-500 mr-2"></i>Basic Payloads
+        </h2>
+        <div class="space-y-4">
+            {% for name, payload in payloads.basic.items %}
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">{{ name|title }}</span>
+                    <button onclick="copyPayload(this)" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <code class="text-green-400 text-sm break-all payload-code">{{ payload }}</code>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Encoded Payloads -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-bold mb-4">
+            <i class="fas fa-lock text-blue-500 mr-2"></i>Encoded Payloads
+        </h2>
+        <div class="space-y-4">
+            {% for name, payload in payloads.encoded.items %}
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">{{ name|title }}</span>
+                    <button onclick="copyPayload(this)" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <code class="text-blue-400 text-sm break-all payload-code">{{ payload }}</code>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Advanced Payloads -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-bold mb-4">
+            <i class="fas fa-rocket text-purple-500 mr-2"></i>Advanced Payloads
+        </h2>
+        <div class="space-y-4">
+            {% for name, payload in payloads.advanced.items %}
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">{{ name|title }}</span>
+                    <button onclick="copyPayload(this)" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <code class="text-purple-400 text-sm break-all payload-code">{{ payload }}</code>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Event Handlers -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-bold mb-4">
+            <i class="fas fa-mouse-pointer text-yellow-500 mr-2"></i>Event Handlers
+        </h2>
+        <p class="text-gray-500 text-sm mb-4">Use these inside HTML attributes to break out</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for name, payload in payloads.event_handlers.items %}
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">{{ name }}</span>
+                    <button onclick="copyPayload(this)" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <code class="text-yellow-400 text-sm break-all payload-code">{{ payload }}</code>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Filter Bypass -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-bold mb-4">
+            <i class="fas fa-shield-alt text-red-500 mr-2"></i>Filter Bypass Techniques
+        </h2>
+        <div class="space-y-4">
+            {% for name, payload in payloads.filter_bypass.items %}
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">{{ name|title }}</span>
+                    <button onclick="copyPayload(this)" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <code class="text-red-400 text-sm break-all payload-code">{{ payload }}</code>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+async function generateCustomPayload() {
+    const context = document.getElementById('contextSelect').value;
+    const encoding = document.getElementById('encodingSelect').value;
+    const output = document.getElementById('customPayloadOutput');
+    
+    try {
+        const response = await fetch('{% url "generate_custom_payload" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ context, encoding })
+        });
+        
+        const data = await response.json();
+        output.textContent = data.payload || data.error;
+    } catch (e) {
+        output.textContent = 'Error generating payload';
+    }
+}
+
+function copyPayload(btn) {
+    const code = btn.closest('.bg-dark-900').querySelector('.payload-code').textContent;
+    navigator.clipboard.writeText(code);
+    btn.innerHTML = '<i class="fas fa-check text-green-500"></i>';
+    setTimeout(() => {
+        btn.innerHTML = '<i class="fas fa-copy"></i>';
+    }, 2000);
+}
+
+function copyCustomPayload() {
+    const code = document.getElementById('customPayloadOutput').textContent;
+    navigator.clipboard.writeText(code);
+}
+</script>
+{% endblock %}

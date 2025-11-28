@@ -1,0 +1,10 @@
+# XJutsu v5 Requirements
+django>=4.2
+channels>=4.0
+channels-redis>=4.1
+daphne>=4.0
+djangorestframework>=3.14
+django-cors-headers>=4.2
+python-dotenv>=1.0
+requests>=2.31
+pillow>=10.0
