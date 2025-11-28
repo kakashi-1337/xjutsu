@@ -1,0 +1,150 @@
+{% extends 'hunter/base.html' %}
+
+{% block title %}Settings - XJutsu v5{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl space-y-8">
+    <!-- Header -->
+    <div>
+        <h1 class="text-3xl font-bold">Settings</h1>
+        <p class="text-gray-500 mt-1">Configure webhooks and API access</p>
+    </div>
+    
+    <!-- Webhooks -->
+    <div class="card rounded-xl p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">
+                <i class="fas fa-bell text-primary mr-2"></i>Webhooks
+            </h2>
+            <button onclick="toggleWebhookForm()" class="btn-primary px-4 py-2 rounded-lg text-sm">
+                <i class="fas fa-plus mr-1"></i>Add Webhook
+            </button>
+        </div>
+        
+        <!-- Add Webhook Form -->
+        <form id="webhookForm" method="post" action="{% url 'webhook_create' %}" class="hidden mb-6 bg-dark-900 rounded-lg p-4 space-y-4">
+            {% csrf_token %}
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1">Name</label>
+                    <input type="text" name="name" required class="w-full px-3 py-2 bg-dark-700 border border-gray-600 rounded focus:outline-none focus:border-primary">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1">Type</label>
+                    <select name="webhook_type" id="webhookType" onchange="toggleTelegramFields()" class="w-full px-3 py-2 bg-dark-700 border border-gray-600 rounded focus:outline-none focus:border-primary">
+                        <option value="discord">Discord</option>
+                        <option value="slack">Slack</option>
+                        <option value="telegram">Telegram</option>
+                        <option value="custom">Custom URL</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 mb-1">Webhook URL</label>
+                <input type="url" name="webhook_url" required class="w-full px-3 py-2 bg-dark-700 border border-gray-600 rounded focus:outline-none focus:border-primary">
+            </div>
+            <div id="telegramFields" class="hidden">
+                <label class="block text-sm text-gray-500 mb-1">Telegram Chat ID</label>
+                <input type="text" name="telegram_chat_id" class="w-full px-3 py-2 bg-dark-700 border border-gray-600 rounded focus:outline-none focus:border-primary">
+            </div>
+            <button type="submit" class="btn-primary px-4 py-2 rounded text-sm">Save Webhook</button>
+        </form>
+        
+        <!-- Webhooks List -->
+        <div class="space-y-3">
+            {% for webhook in webhooks %}
+            <div class="flex items-center justify-between bg-dark-900 rounded-lg p-4">
+                <div class="flex items-center space-x-4">
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center
+                        {% if webhook.webhook_type == 'discord' %}bg-indigo-500/20{% elif webhook.webhook_type == 'slack' %}bg-green-500/20{% elif webhook.webhook_type == 'telegram' %}bg-blue-500/20{% else %}bg-gray-500/20{% endif %}">
+                        <i class="fab {% if webhook.webhook_type == 'discord' %}fa-discord text-indigo-500{% elif webhook.webhook_type == 'slack' %}fa-slack text-green-500{% elif webhook.webhook_type == 'telegram' %}fa-telegram text-blue-500{% else %}fa-link text-gray-500{% endif %}"></i>
+                    </div>
+                    <div>
+                        <p class="font-semibold">{{ webhook.name }}</p>
+                        <p class="text-sm text-gray-500">{{ webhook.get_webhook_type_display }}</p>
+                    </div>
+                </div>
+                <span class="{% if webhook.is_active %}text-green-500{% else %}text-gray-500{% endif %}">
+                    <i class="fas fa-circle text-xs"></i>
+                </span>
+            </div>
+            {% empty %}
+            <p class="text-gray-500 text-center py-4">No webhooks configured</p>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- API Keys -->
+    <div class="card rounded-xl p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">
+                <i class="fas fa-key text-yellow-500 mr-2"></i>API Keys
+            </h2>
+            <form method="post" action="{% url 'api_key_create' %}" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="name" value="API Key">
+                <button type="submit" class="btn-primary px-4 py-2 rounded-lg text-sm">
+                    <i class="fas fa-plus mr-1"></i>Generate Key
+                </button>
+            </form>
+        </div>
+        
+        <div class="space-y-3">
+            {% for key in api_keys %}
+            <div class="flex items-center justify-between bg-dark-900 rounded-lg p-4">
+                <div>
+                    <p class="font-semibold">{{ key.name }}</p>
+                    <code class="text-sm text-primary">{{ key.key }}</code>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-500">Created {{ key.created_at|timesince }} ago</p>
+                    {% if key.last_used %}
+                    <p class="text-xs text-gray-600">Last used: {{ key.last_used|timesince }} ago</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-gray-500 text-center py-4">No API keys generated</p>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Server Info -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-bold mb-6">
+            <i class="fas fa-server text-green-500 mr-2"></i>Server Information
+        </h2>
+        <div class="grid grid-cols-2 gap-6">
+            <div>
+                <p class="text-sm text-gray-500 mb-1">Callback URL</p>
+                <code class="text-sm text-green-400">{{ request.scheme }}://{{ request.get_host }}/x.js</code>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 mb-1">WebSocket URL</p>
+                <code class="text-sm text-blue-400">{% if request.is_secure %}wss{% else %}ws{% endif %}://{{ request.get_host }}/ws/callback/</code>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 mb-1">API Endpoint</p>
+                <code class="text-sm text-purple-400">{{ request.scheme }}://{{ request.get_host }}/api/callback/</code>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleWebhookForm() {
+    const form = document.getElementById('webhookForm');
+    form.classList.toggle('hidden');
+}
+
+function toggleTelegramFields() {
+    const type = document.getElementById('webhookType').value;
+    const fields = document.getElementById('telegramFields');
+    if (type === 'telegram') {
+        fields.classList.remove('hidden');
+    } else {
+        fields.classList.add('hidden');
+    }
+}
+</script>
+{% endblock %}

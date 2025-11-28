@@ -1,0 +1,81 @@
+{% extends 'hunter/base.html' %}
+
+{% block title %}Create Payload - XJutsu v5{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <!-- Header -->
+    <div>
+        <a href="{% url 'payloads_list' %}" class="text-gray-500 hover:text-white transition">
+            <i class="fas fa-arrow-left mr-2"></i>Back to Payloads
+        </a>
+        <h1 class="text-3xl font-bold mt-2">Create New Payload</h1>
+        <p class="text-gray-500 mt-1">Configure a new XSS payload</p>
+    </div>
+    
+    <form method="post" class="card rounded-xl p-6 space-y-6">
+        {% csrf_token %}
+        
+        <!-- Basic Info -->
+        <div>
+            <label class="block text-sm font-medium text-gray-400 mb-2">Payload Name *</label>
+            <input type="text" name="name" required
+                class="w-full px-4 py-3 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary transition"
+                placeholder="e.g., HackerOne Program X">
+        </div>
+        
+        <div>
+            <label class="block text-sm font-medium text-gray-400 mb-2">Description</label>
+            <textarea name="description" rows="3"
+                class="w-full px-4 py-3 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary transition"
+                placeholder="Where are you using this payload?"></textarea>
+        </div>
+        
+        <!-- Collection Options -->
+        <div>
+            <label class="block text-sm font-medium text-gray-400 mb-4">Data Collection</label>
+            <div class="grid grid-cols-2 gap-4">
+                <label class="flex items-center space-x-3 bg-dark-900 p-3 rounded-lg cursor-pointer hover:bg-dark-700 transition">
+                    <input type="checkbox" name="collect_cookies" checked class="form-checkbox h-5 w-5 text-primary rounded">
+                    <span><i class="fas fa-cookie text-yellow-500 mr-2"></i>Cookies</span>
+                </label>
+                
+                <label class="flex items-center space-x-3 bg-dark-900 p-3 rounded-lg cursor-pointer hover:bg-dark-700 transition">
+                    <input type="checkbox" name="collect_localstorage" checked class="form-checkbox h-5 w-5 text-primary rounded">
+                    <span><i class="fas fa-database text-blue-500 mr-2"></i>LocalStorage</span>
+                </label>
+                
+                <label class="flex items-center space-x-3 bg-dark-900 p-3 rounded-lg cursor-pointer hover:bg-dark-700 transition">
+                    <input type="checkbox" name="collect_sessionstorage" checked class="form-checkbox h-5 w-5 text-primary rounded">
+                    <span><i class="fas fa-clock text-purple-500 mr-2"></i>SessionStorage</span>
+                </label>
+                
+                <label class="flex items-center space-x-3 bg-dark-900 p-3 rounded-lg cursor-pointer hover:bg-dark-700 transition">
+                    <input type="checkbox" name="collect_dom" checked class="form-checkbox h-5 w-5 text-primary rounded">
+                    <span><i class="fas fa-code text-pink-500 mr-2"></i>DOM HTML</span>
+                </label>
+                
+                <label class="flex items-center space-x-3 bg-dark-900 p-3 rounded-lg cursor-pointer hover:bg-dark-700 transition">
+                    <input type="checkbox" name="collect_screenshot" checked class="form-checkbox h-5 w-5 text-primary rounded">
+                    <span><i class="fas fa-camera text-green-500 mr-2"></i>Screenshot</span>
+                </label>
+                
+                <label class="flex items-center space-x-3 bg-dark-900 p-3 rounded-lg cursor-pointer hover:bg-dark-700 transition">
+                    <input type="checkbox" name="collect_urls" checked class="form-checkbox h-5 w-5 text-primary rounded">
+                    <span><i class="fas fa-link text-cyan-500 mr-2"></i>Page Links</span>
+                </label>
+            </div>
+        </div>
+        
+        <!-- Submit -->
+        <div class="flex justify-end space-x-4">
+            <a href="{% url 'payloads_list' %}" class="px-6 py-3 text-gray-400 hover:text-white transition">
+                Cancel
+            </a>
+            <button type="submit" class="btn-primary px-6 py-3 rounded-lg font-semibold transition">
+                <i class="fas fa-plus mr-2"></i>Create Payload
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

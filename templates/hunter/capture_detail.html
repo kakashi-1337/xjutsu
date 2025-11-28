@@ -1,0 +1,196 @@
+{% extends 'hunter/base.html' %}
+
+{% block title %}Capture {{ capture.short_id }} - XJutsu v5{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <a href="{% url 'captures_list' %}" class="text-gray-500 hover:text-white transition">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Captures
+            </a>
+            <h1 class="text-3xl font-bold mt-2">Capture #{{ capture.short_id }}</h1>
+            <p class="text-gray-500 mt-1">{{ capture.uri }}</p>
+        </div>
+        <div class="flex space-x-4">
+            <form method="post" action="{% url 'capture_update_status' capture.id %}" class="inline">
+                {% csrf_token %}
+                <select name="status" onchange="this.form.submit()" class="px-4 py-2 bg-dark-900 border border-gray-700 rounded-lg focus:outline-none focus:border-primary">
+                    <option value="new" {% if capture.status == 'new' %}selected{% endif %}>New</option>
+                    <option value="viewed" {% if capture.status == 'viewed' %}selected{% endif %}>Viewed</option>
+                    <option value="resolved" {% if capture.status == 'resolved' %}selected{% endif %}>Resolved</option>
+                    <option value="false_positive" {% if capture.status == 'false_positive' %}selected{% endif %}>False Positive</option>
+                </select>
+            </form>
+            <form method="post" action="{% url 'capture_delete' capture.id %}" onsubmit="return confirm('Delete this capture?')">
+                {% csrf_token %}
+                <button type="submit" class="px-4 py-2 bg-red-500/20 text-red-500 border border-red-500/50 rounded-lg hover:bg-red-500/30 transition">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Info -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Screenshot -->
+            {% if capture.screenshot %}
+            <div class="card rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-camera text-primary mr-2"></i>Screenshot
+                </h2>
+                <img src="{{ capture.screenshot }}" alt="Screenshot" class="w-full rounded-lg border border-gray-700">
+            </div>
+            {% endif %}
+            
+            <!-- Cookies -->
+            {% if capture.cookies %}
+            <div class="card rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-cookie text-yellow-500 mr-2"></i>Cookies
+                </h2>
+                <div class="bg-dark-900 rounded-lg p-4 overflow-x-auto">
+                    <pre class="text-green-400 text-sm whitespace-pre-wrap">{{ capture.cookies }}</pre>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Local Storage -->
+            {% if capture.localstorage and capture.localstorage != '{}' %}
+            <div class="card rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-database text-blue-500 mr-2"></i>Local Storage
+                </h2>
+                <div class="bg-dark-900 rounded-lg p-4 overflow-x-auto">
+                    <pre class="text-blue-400 text-sm whitespace-pre-wrap">{{ capture.localstorage }}</pre>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Session Storage -->
+            {% if capture.sessionstorage and capture.sessionstorage != '{}' %}
+            <div class="card rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">
+                    <i class="fas fa-clock text-purple-500 mr-2"></i>Session Storage
+                </h2>
+                <div class="bg-dark-900 rounded-lg p-4 overflow-x-auto">
+                    <pre class="text-purple-400 text-sm whitespace-pre-wrap">{{ capture.sessionstorage }}</pre>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- DOM -->
+            {% if capture.dom %}
+            <div class="card rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4 flex justify-between items-center">
+                    <span><i class="fas fa-code text-pink-500 mr-2"></i>DOM Content</span>
+                    <button onclick="toggleDOM()" class="text-sm text-gray-400 hover:text-white">
+                        <i class="fas fa-expand mr-1"></i>Toggle
+                    </button>
+                </h2>
+                <div id="domContent" class="bg-dark-900 rounded-lg p-4 overflow-x-auto max-h-96 overflow-y-auto">
+                    <pre class="text-pink-400 text-xs whitespace-pre-wrap">{{ capture.dom }}</pre>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Sidebar Info -->
+        <div class="space-y-6">
+            <!-- Target Info -->
+            <div class="card rounded-xl p-6">
+                <h2 class="text-lg font-bold mb-4">
+                    <i class="fas fa-info-circle text-primary mr-2"></i>Target Info
+                </h2>
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-gray-500 text-sm">URL</dt>
+                        <dd class="text-sm break-all mt-1">{{ capture.uri }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-500 text-sm">Origin</dt>
+                        <dd class="text-sm break-all mt-1">{{ capture.origin|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-500 text-sm">Referrer</dt>
+                        <dd class="text-sm break-all mt-1">{{ capture.referrer|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-500 text-sm">Fired At</dt>
+                        <dd class="text-sm mt-1">{{ capture.fired_at }}</dd>
+                    </div>
+                </dl>
+            </div>
+            
+            <!-- Client Info -->
+            <div class="card rounded-xl p-6">
+                <h2 class="text-lg font-bold mb-4">
+                    <i class="fas fa-user-secret text-secondary mr-2"></i>Client Info
+                </h2>
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-gray-500 text-sm">IP Address</dt>
+                        <dd class="text-sm mt-1">{{ capture.ip_address|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-500 text-sm">Location</dt>
+                        <dd class="text-sm mt-1">
+                            {% if capture.city or capture.country %}
+                            🌍 {{ capture.city }}{% if capture.city and capture.country %}, {% endif %}{{ capture.country }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% if capture.geolocation %}
+                    <div>
+                        <dt class="text-gray-500 text-sm">Coordinates</dt>
+                        <dd class="text-sm mt-1">
+                            <a href="https://www.google.com/maps?q={{ capture.geolocation }}" target="_blank" class="text-primary hover:text-secondary">
+                                {{ capture.geolocation }} <i class="fas fa-external-link-alt text-xs"></i>
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <dt class="text-gray-500 text-sm">Bot ID</dt>
+                        <dd class="text-sm font-mono mt-1">{{ capture.bot_id }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-500 text-sm">User Agent</dt>
+                        <dd class="text-xs break-all mt-1 text-gray-400">{{ capture.user_agent|default:"-" }}</dd>
+                    </div>
+                </dl>
+                
+                <!-- Send Command to This Bot -->
+                <div class="mt-6 pt-4 border-t border-gray-700">
+                    <a href="{% url 'bot_commander' %}?bot={{ capture.bot_id }}" class="block text-center py-2 bg-primary/20 text-primary rounded-lg hover:bg-primary/30 transition">
+                        <i class="fas fa-terminal mr-2"></i>Send Command
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Page Links -->
+            {% if capture.page_links %}
+            <div class="card rounded-xl p-6">
+                <h2 class="text-lg font-bold mb-4">
+                    <i class="fas fa-link text-green-500 mr-2"></i>Page Links
+                </h2>
+                <div class="max-h-64 overflow-y-auto">
+                    <pre class="text-xs text-gray-400">{{ capture.page_links }}</pre>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleDOM() {
+    const dom = document.getElementById('domContent');
+    dom.classList.toggle('max-h-96');
+}
+</script>
+{% endblock %}
