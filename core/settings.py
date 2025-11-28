@@ -23,7 +23,7 @@ CORS_ALLOW_CREDENTIALS = True
 # Application definition
 INSTALLED_APPS = [
     # Django Channels (must be before django apps)
-    'daphne',
+    # 'daphne',  # Uncomment when daphne is installed
     'channels',
     
     # Django defaults
@@ -133,6 +133,7 @@ LOGIN_REDIRECT_URL = '/dashboard/'
 LOGOUT_REDIRECT_URL = '/login/'
 
 # XJutsu Settings
+# by Dave Lester B. Mondina / ANBU Black Ops Security
 XJUTSU_CONFIG = {
     'SERVER_NAME': os.getenv('SERVER_NAME', 'localhost'),
     'SERVER_PORT': os.getenv('SERVER_PORT', '8000'),
@@ -142,3 +143,29 @@ XJUTSU_CONFIG = {
     'TELEGRAM_CHAT_ID': os.getenv('TELEGRAM_CHAT_ID', ''),
     'WEBHOOK_SLACK': os.getenv('WEBHOOK_SLACK', ''),
 }
+
+# Short domain for minimal payloads (e.g., 6u.gg)
+# Enables: <script src=//6u.gg></script>
+SHORT_DOMAIN = os.getenv('SHORT_DOMAIN', '')
+
+# Token signing secret (defaults to SECRET_KEY)
+XJUTSU_TOKEN_SECRET = os.getenv('XJUTSU_TOKEN_SECRET', SECRET_KEY)
+
+# Rate limiting settings
+XJUTSU_RATE_LIMIT = {
+    'PAYLOAD_REQUESTS_PER_MINUTE': int(os.getenv('RATE_LIMIT_PAYLOAD', '60')),
+    'CALLBACK_REQUESTS_PER_MINUTE': int(os.getenv('RATE_LIMIT_CALLBACK', '30')),
+}
+
+# Security headers for dashboard (not payload endpoints)
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+
+# Production settings (enable when deploying)
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True

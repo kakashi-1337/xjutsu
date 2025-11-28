@@ -134,6 +134,10 @@
                     <i class="fas fa-magic w-6"></i>
                     <span>Generator</span>
                 </a>
+                <a href="{% url 'payload_library' %}" class="flex items-center px-6 py-3 text-gray-300 hover:bg-dark-700 hover:text-white transition {% if 'library' in request.resolver_match.url_name %}bg-dark-700 text-white border-r-2 border-yellow-500{% endif %}">
+                    <i class="fas fa-book w-6"></i>
+                    <span>Library</span>
+                </a>
                 <a href="{% url 'bot_commander' %}" class="flex items-center px-6 py-3 text-gray-300 hover:bg-dark-700 hover:text-white transition {% if 'commander' in request.resolver_match.url_name %}bg-dark-700 text-white border-r-2 border-red-500{% endif %}">
                     <i class="fas fa-terminal w-6"></i>
                     <span>Commander</span>

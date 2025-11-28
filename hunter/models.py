@@ -190,3 +190,101 @@ class APIKey(models.Model):
         if not self.key:
             self.key = self.generate_key()
         super().save(*args, **kwargs)
+
+
+class PayloadToken(models.Model):
+    """
+    Single-use tokens for payload serving (HMAC signed)
+    Prevents payload reuse and provides provenance
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    payload = models.ForeignKey(Payload, on_delete=models.CASCADE, related_name='tokens', null=True, blank=True)
+    token = models.CharField(max_length=128, unique=True, db_index=True)
+
+    # Tracking
+    target_url = models.URLField(max_length=2048, blank=True, help_text="Expected target URL (optional)")
+    is_used = models.BooleanField(default=False)
+    used_at = models.DateTimeField(null=True, blank=True)
+    used_ip = models.GenericIPAddressField(null=True, blank=True)
+
+    # Rate limiting
+    use_count = models.IntegerField(default=0)
+    max_uses = models.IntegerField(default=1, help_text="Max times token can be used (0=unlimited)")
+
+    # Expiry
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['token']),
+            models.Index(fields=['is_used']),
+        ]
+
+    def __str__(self):
+        return f"Token {self.token[:8]}... ({'used' if self.is_used else 'active'})"
+
+    @property
+    def is_valid(self):
+        """Check if token is still valid"""
+        if self.is_used and self.max_uses == 1:
+            return False
+        if self.max_uses > 0 and self.use_count >= self.max_uses:
+            return False
+        if self.expires_at and timezone.now() > self.expires_at:
+            return False
+        return True
+
+    def mark_used(self, ip_address=None):
+        """Mark token as used"""
+        self.use_count += 1
+        self.used_at = timezone.now()
+        self.used_ip = ip_address
+        if self.max_uses == 1:
+            self.is_used = True
+        self.save()
+
+
+class PayloadLibrary(models.Model):
+    """
+    Library of XSS payload templates for different frameworks/contexts
+    """
+    CATEGORY_CHOICES = [
+        ('react', 'React'),
+        ('vue', 'Vue.js'),
+        ('angular', 'Angular'),
+        ('nextjs', 'Next.js'),
+        ('svelte', 'Svelte'),
+        ('htmx', 'HTMX/Alpine'),
+        ('dom_clobbering', 'DOM Clobbering'),
+        ('csp_probe', 'CSP Probes'),
+        ('mutation', 'Mutation XSS'),
+        ('polyglot', 'Polyglots'),
+        ('trusted_types', 'Trusted Types'),
+        ('short', 'Ultra-Short'),
+        ('custom', 'Custom'),
+    ]
+
+    name = models.CharField(max_length=255)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    payload = models.TextField()
+    context = models.CharField(max_length=255, blank=True, help_text="Where this payload works")
+    notes = models.TextField(blank=True)
+
+    # Metadata
+    char_count = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Payload Library Entry"
+        verbose_name_plural = "Payload Library"
+        ordering = ['category', 'char_count']
+
+    def __str__(self):
+        return f"[{self.category}] {self.name}"
+
+    def save(self, *args, **kwargs):
+        self.char_count = len(self.payload)
+        super().save(*args, **kwargs)
