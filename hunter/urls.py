@@ -57,4 +57,10 @@ urlpatterns = [
 
     # API callback (fallback for non-WebSocket)
     path('api/callback/', views.api_callback, name='api_callback'),
+
+    # Reports - Bug Bounty Report Generator
+    path('reports/', views.reports_list, name='reports_list'),
+    path('reports/domain/<str:domain>/', views.report_by_domain, name='report_by_domain'),
+    path('reports/capture/<uuid:capture_id>/', views.report_capture, name='report_capture'),
+    path('reports/scan/<uuid:scan_id>/', views.report_scan, name='report_scan'),
 ]

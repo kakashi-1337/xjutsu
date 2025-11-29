@@ -966,3 +966,191 @@ def generate_token(request):
         })
 
     return JsonResponse({'error': 'POST required'}, status=400)
+
+
+# ============== Reports ==============
+
+@login_required
+def reports_list(request):
+    """
+    List all scans and domains for reporting
+    """
+    from .models import ScanTarget, ScanInjectionPoint
+
+    # Get all scans
+    scans = ScanTarget.objects.all()
+
+    # Get unique domains from captures
+    domains = (
+        Capture.objects
+        .values('origin')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+    )
+
+    # Get verified XSS counts
+    verified_by_domain = {}
+    for scan in scans:
+        if scan.verified_xss > 0:
+            verified_by_domain[scan.target_domain] = verified_by_domain.get(scan.target_domain, 0) + scan.verified_xss
+
+    context = {
+        'scans': scans,
+        'domains': domains,
+        'verified_by_domain': verified_by_domain,
+    }
+
+    return render(request, 'hunter/reports_list.html', context)
+
+
+@login_required
+def report_by_domain(request, domain):
+    """
+    Generate report for a specific domain
+    """
+    from .models import ScanTarget, ScanInjectionPoint
+    from .reports import ReportGenerator
+
+    # Get captures for this domain
+    captures = Capture.objects.filter(origin__icontains=domain)
+
+    # Get injection points for this domain
+    injection_points = ScanInjectionPoint.objects.filter(url__icontains=domain)
+
+    # Get format
+    fmt = request.GET.get('format', 'html')
+
+    if fmt == 'markdown' or fmt == 'md':
+        # Generate markdown report
+        report = ReportGenerator.generate_domain_report(
+            domain=domain,
+            captures=list(captures),
+            injection_points=list(injection_points)
+        )
+        response = HttpResponse(report, content_type='text/markdown')
+        response['Content-Disposition'] = f'attachment; filename="xss_report_{domain}.md"'
+        return response
+
+    elif fmt == 'json':
+        # Generate JSON export
+        report = ReportGenerator.export_json(
+            captures=list(captures),
+            injection_points=list(injection_points)
+        )
+        response = HttpResponse(report, content_type='application/json')
+        response['Content-Disposition'] = f'attachment; filename="xss_report_{domain}.json"'
+        return response
+
+    elif fmt == 'hackerone' or fmt == 'h1':
+        # Generate HackerOne format for first finding
+        if injection_points.exists():
+            ip = injection_points.first()
+            report = ReportGenerator.generate_hackerone_format(injection_point=ip)
+        elif captures.exists():
+            cap = captures.first()
+            report = ReportGenerator.generate_hackerone_format(capture=cap)
+        else:
+            report = "No findings for this domain."
+
+        return HttpResponse(f"<pre>{report}</pre>", content_type='text/html')
+
+    # Default: HTML view
+    context = {
+        'domain': domain,
+        'captures': captures,
+        'injection_points': injection_points,
+        'verified_count': injection_points.filter(is_verified=True).count(),
+        'total_captures': captures.count(),
+    }
+
+    return render(request, 'hunter/report_domain.html', context)
+
+
+@login_required
+def report_capture(request, capture_id):
+    """
+    Generate report for a single capture
+    """
+    from .reports import ReportGenerator
+
+    capture = get_object_or_404(Capture, id=capture_id)
+    fmt = request.GET.get('format', 'markdown')
+
+    # Check if capture has linked injection point
+    injection_point = None
+    if hasattr(capture, 'injection_point') and capture.injection_point.exists():
+        injection_point = capture.injection_point.first()
+
+    if fmt == 'markdown' or fmt == 'md':
+        report = ReportGenerator.generate_markdown_report(
+            capture=capture,
+            injection_point=injection_point
+        )
+        response = HttpResponse(report, content_type='text/markdown')
+        response['Content-Disposition'] = f'attachment; filename="xss_report_{capture.short_id}.md"'
+        return response
+
+    elif fmt == 'hackerone' or fmt == 'h1':
+        report = ReportGenerator.generate_hackerone_format(
+            capture=capture,
+            injection_point=injection_point
+        )
+        response = HttpResponse(report, content_type='text/markdown')
+        response['Content-Disposition'] = f'attachment; filename="xss_h1_{capture.short_id}.md"'
+        return response
+
+    # Default: show in browser
+    report = ReportGenerator.generate_markdown_report(
+        capture=capture,
+        injection_point=injection_point
+    )
+    return HttpResponse(f"<pre>{report}</pre>", content_type='text/html')
+
+
+@login_required
+def report_scan(request, scan_id):
+    """
+    Generate report for a scan
+    """
+    from .models import ScanTarget, ScanInjectionPoint
+    from .reports import ReportGenerator
+
+    scan = get_object_or_404(ScanTarget, id=scan_id)
+    injection_points = scan.injection_points.all()
+
+    # Get captures linked to this scan
+    captures = Capture.objects.filter(
+        tracking_id__in=injection_points.values_list('tracking_id', flat=True)
+    )
+
+    fmt = request.GET.get('format', 'html')
+
+    if fmt == 'markdown' or fmt == 'md':
+        report = ReportGenerator.generate_domain_report(
+            domain=scan.target_domain,
+            captures=list(captures),
+            injection_points=list(injection_points)
+        )
+        response = HttpResponse(report, content_type='text/markdown')
+        response['Content-Disposition'] = f'attachment; filename="scan_report_{scan.target_domain}.md"'
+        return response
+
+    elif fmt == 'json':
+        report = ReportGenerator.export_json(
+            captures=list(captures),
+            injection_points=list(injection_points)
+        )
+        response = HttpResponse(report, content_type='application/json')
+        response['Content-Disposition'] = f'attachment; filename="scan_report_{scan.target_domain}.json"'
+        return response
+
+    # Default: HTML view
+    context = {
+        'scan': scan,
+        'injection_points': injection_points,
+        'captures': captures,
+        'verified_points': injection_points.filter(is_verified=True),
+        'reflecting_points': injection_points.filter(reflects=True),
+    }
+
+    return render(request, 'hunter/report_scan.html', context)
