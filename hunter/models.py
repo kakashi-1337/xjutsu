@@ -60,6 +60,9 @@ class Capture(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     payload = models.ForeignKey(Payload, on_delete=models.CASCADE, related_name='captures', null=True, blank=True)
     bot_id = models.CharField(max_length=64, db_index=True, help_text="Unique browser session ID")
+
+    # Scanner tracking (for auto-verified XSS)
+    tracking_id = models.CharField(max_length=64, blank=True, db_index=True, help_text="Tracking ID from scanner")
     
     # Target information
     uri = models.URLField(max_length=2048, help_text="URL where XSS fired")
@@ -291,3 +294,127 @@ class PayloadLibrary(models.Model):
     def save(self, *args, **kwargs):
         self.char_count = len(self.payload)
         super().save(*args, **kwargs)
+
+
+class ScanTarget(models.Model):
+    """
+    XSS Scan target and results
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('crawling', 'Crawling'),
+        ('analyzing', 'Analyzing'),
+        ('injecting', 'Injecting'),
+        ('completed', 'Completed'),
+        ('error', 'Error'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='scans', null=True, blank=True)
+
+    # Target info
+    target_url = models.URLField(max_length=2048)
+    target_domain = models.CharField(max_length=255, blank=True)
+
+    # Scan settings
+    max_depth = models.IntegerField(default=3)
+    max_urls = models.IntegerField(default=100)
+    xjutsu_domain = models.CharField(max_length=255, default='6u.gg')
+
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    error_message = models.TextField(blank=True)
+
+    # Stats
+    urls_crawled = models.IntegerField(default=0)
+    injection_points_found = models.IntegerField(default=0)
+    reflecting_params = models.IntegerField(default=0)
+    payloads_injected = models.IntegerField(default=0)
+    verified_xss = models.IntegerField(default=0)
+
+    # Timestamps
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Scan Target"
+        verbose_name_plural = "Scan Targets"
+
+    def __str__(self):
+        return f"Scan: {self.target_domain} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        if not self.target_domain:
+            from urllib.parse import urlparse
+            self.target_domain = urlparse(self.target_url).netloc
+        super().save(*args, **kwargs)
+
+    @property
+    def duration(self):
+        if self.started_at and self.completed_at:
+            return self.completed_at - self.started_at
+        return None
+
+
+class ScanInjectionPoint(models.Model):
+    """
+    Discovered injection point from a scan
+    """
+    CONTEXT_CHOICES = [
+        ('html_text', 'HTML Text'),
+        ('html_attr', 'HTML Attribute'),
+        ('html_attr_unquoted', 'HTML Attr (Unquoted)'),
+        ('html_href', 'HTML href/src'),
+        ('html_event', 'Event Handler'),
+        ('js_string', 'JS String'),
+        ('js_code', 'JS Code'),
+        ('css_value', 'CSS Value'),
+        ('url_param', 'URL Parameter'),
+        ('comment', 'HTML Comment'),
+        ('unknown', 'Unknown'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    scan = models.ForeignKey(ScanTarget, on_delete=models.CASCADE, related_name='injection_points')
+
+    # Injection point details
+    url = models.URLField(max_length=2048)
+    param = models.CharField(max_length=255)
+    method = models.CharField(max_length=10, default='GET')
+    context = models.CharField(max_length=30, choices=CONTEXT_CHOICES, default='unknown')
+
+    # Analysis results
+    reflects = models.BooleanField(default=False)
+    reflection_count = models.IntegerField(default=0)
+    vulnerable_chars = models.CharField(max_length=255, blank=True, help_text="Unfiltered XSS chars")
+
+    # Injection tracking
+    tracking_id = models.CharField(max_length=64, blank=True, db_index=True)
+    payload_injected = models.TextField(blank=True)
+    injected_at = models.DateTimeField(null=True, blank=True)
+
+    # Verification
+    is_verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    capture = models.ForeignKey(Capture, on_delete=models.SET_NULL, null=True, blank=True, related_name='injection_point')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_verified', '-reflects', '-created_at']
+        indexes = [
+            models.Index(fields=['tracking_id']),
+            models.Index(fields=['is_verified']),
+        ]
+
+    def __str__(self):
+        status = "VERIFIED" if self.is_verified else ("reflects" if self.reflects else "no reflection")
+        return f"{self.param} @ {self.url[:50]} [{status}]"
+
+    @property
+    def domain(self):
+        from urllib.parse import urlparse
+        return urlparse(self.url).netloc
+

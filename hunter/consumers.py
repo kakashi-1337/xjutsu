@@ -99,25 +99,29 @@ class XSSCallbackConsumer(AsyncWebsocketConsumer):
         Handle main XSS callback with captured data
         """
         from hunter.models import Capture, Payload
-        
+
         payload_data = data.get('payload', {})
-        
+
         # Get client IP from scope
         client_ip = None
         if 'client' in self.scope:
             client_ip = self.scope['client'][0]
-        
+
         # Extract payload ID if present
         payload_id = payload_data.get('payload_id')
         payload_obj = None
-        
+
         if payload_id:
             payload_obj = await self.get_payload(payload_id)
-        
+
+        # Extract tracking ID (from scanner)
+        tracking_id = payload_data.get('tracking_id', '')
+
         # Create capture record
         capture = await self.create_capture(
             payload=payload_obj,
             bot_id=self.bot_id or payload_data.get('bot_id', 'unknown'),
+            tracking_id=tracking_id,
             uri=payload_data.get('uri', ''),
             origin=payload_data.get('origin', ''),
             referrer=payload_data.get('referrer', ''),
@@ -130,6 +134,10 @@ class XSSCallbackConsumer(AsyncWebsocketConsumer):
             user_agent=payload_data.get('user_agent', ''),
             browser_info=payload_data.get('browser_info', ''),
         )
+
+        # Auto-verify XSS if tracking_id matches a scan injection point
+        if tracking_id:
+            await self.verify_xss_from_scan(capture, tracking_id)
         
         # Broadcast to dashboard
         await self.channel_layer.group_send(
@@ -232,6 +240,39 @@ class XSSCallbackConsumer(AsyncWebsocketConsumer):
             )
         except Capture.DoesNotExist:
             pass
+
+    @database_sync_to_async
+    def verify_xss_from_scan(self, capture, tracking_id):
+        """
+        Auto-verify XSS by linking capture to scan injection point
+        """
+        from hunter.models import ScanInjectionPoint, ScanTarget
+        from django.utils import timezone
+
+        try:
+            # Find injection point with this tracking ID
+            injection_point = ScanInjectionPoint.objects.get(tracking_id=tracking_id)
+
+            # Mark as verified
+            injection_point.is_verified = True
+            injection_point.verified_at = timezone.now()
+            injection_point.capture = capture
+            injection_point.save()
+
+            # Update scan stats
+            scan = injection_point.scan
+            scan.verified_xss = ScanInjectionPoint.objects.filter(
+                scan=scan, is_verified=True
+            ).count()
+            scan.save()
+
+            logger.info(f"AUTO-VERIFIED XSS: {injection_point.param} @ {injection_point.url}")
+
+        except ScanInjectionPoint.DoesNotExist:
+            # No matching injection point - might be manual payload
+            pass
+        except Exception as e:
+            logger.error(f"Error verifying XSS: {e}")
     
     async def send_notifications(self, capture):
         """
